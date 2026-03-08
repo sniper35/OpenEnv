@@ -1,0 +1,14 @@
+# IsaacLab-Arena OpenEnv server dependencies
+# Installed via /isaac-sim/python.sh -m pip install in the Docker image
+# (Isaac Sim bundles its own Python + CUDA-linked packages)
+
+fastapi>=0.115.0
+uvicorn>=0.24.0
+pydantic>=2.0.0
+requests>=2.31.0
+
+# OpenEnv core (installed from git in Dockerfile)
+# openenv-core[core] @ git+https://github.com/meta-pytorch/OpenEnv.git
+
+# Isaac Sim + IsaacLab + IsaacLab-Arena are pre-installed in the base image
+# via /isaac-sim/python.sh (not pip-installable from PyPI)

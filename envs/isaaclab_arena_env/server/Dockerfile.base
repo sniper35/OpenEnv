@@ -1,0 +1,71 @@
+# IsaacLab-Arena Base Image
+#
+# Builds the slow layer (Isaac Sim + IsaacLab + IsaacLab-Arena + shader pre-warm).
+# Push this once and reuse across env image builds.
+#
+# Build (30-60 min):
+#   docker build \
+#     -f envs/isaaclab_arena_env/server/Dockerfile.base \
+#     -t ghcr.io/meta-pytorch/isaaclab-arena-base:5.0.0 \
+#     /path/to/IsaacLab-Arena  # build context is IsaacLab-Arena repo root
+#   docker push ghcr.io/meta-pytorch/isaaclab-arena-base:5.0.0
+#
+# Prerequisites:
+#   - NVIDIA NGC account + nvcr.io access (for Isaac Sim base image)
+#   - IsaacLab-Arena repo checked out with submodules:
+#       git clone --recurse-submodules https://github.com/isaac-sim/IsaacLab-Arena
+
+ARG BASE_IMAGE=nvcr.io/nvidia/isaac-sim:5.0.0
+FROM ${BASE_IMAGE}
+
+ARG WORKDIR="/workspace"
+ENV WORKDIR=${WORKDIR}
+WORKDIR "${WORKDIR}"
+
+# ── Fix Vulkan conflicts ───────────────────────────────────────────────────────
+RUN if [ -e "/usr/share/vulkan" ] && [ -e "/etc/vulkan" ]; then \
+      mv /usr/share/vulkan /usr/share/vulkan_hidden; \
+    fi
+
+# ── System dependencies ────────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    git-lfs \
+    cmake \
+    curl \
+    sudo \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Install IsaacLab ───────────────────────────────────────────────────────────
+COPY ./submodules/IsaacLab ${WORKDIR}/submodules/IsaacLab
+ENV ISAACLAB_PATH=${WORKDIR}/submodules/IsaacLab
+ENV TERM=xterm
+
+RUN ln -s /isaac-sim/ ${WORKDIR}/submodules/IsaacLab/_isaac_sim
+RUN chmod 777 -R /isaac-sim/kit/
+RUN /isaac-sim/python.sh -m pip install --upgrade pip
+
+# Install IsaacLab packages (no-deps first, then full install)
+RUN for DIR in ${WORKDIR}/submodules/IsaacLab/source/isaaclab*/; do \
+        /isaac-sim/python.sh -m pip install --no-deps -e "$DIR"; \
+    done
+RUN /isaac-sim/python.sh -m pip install --no-build-isolation flatdict==4.0.1
+RUN ${ISAACLAB_PATH}/isaaclab.sh -i
+
+# Patch osqp/qpsolvers incompatibility (see IsaacLab-Arena Dockerfile.isaaclab_arena)
+RUN /isaac-sim/python.sh -m pip install qpsolvers==4.8.1 || true
+
+# ── Install IsaacLab-Arena ─────────────────────────────────────────────────────
+COPY ./isaaclab_arena /workspace/isaaclab_arena_src/
+RUN /isaac-sim/python.sh -m pip install -e /workspace/isaaclab_arena_src/
+
+# ── Pre-warm shaders (avoid 5-10 min first-run delay) ─────────────────────────
+# Run a minimal headless Isaac Sim session to cache Vulkan shaders
+# This converts cold-start ~15min to warm-start ~2min
+RUN ACCEPT_EULA=Y OMNI_KIT_ACCEPT_EULA=YES \
+    /isaac-sim/python.sh -c "
+from isaaclab.app import AppLauncher
+app = AppLauncher({'headless': True, 'num_envs': 1}).app
+app.close()
+" || true

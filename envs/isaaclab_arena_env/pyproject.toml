@@ -1,0 +1,42 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openenv-isaaclab-arena-env"
+version = "0.1.0"
+description = "IsaacLab-Arena Environment for OpenEnv - GPU-accelerated robotics simulation via NVIDIA Isaac Sim"
+requires-python = ">=3.10"
+dependencies = [
+    # Core OpenEnv dependencies
+    "openenv-core[core] @ git+https://github.com/meta-pytorch/OpenEnv.git",
+    "fastapi>=0.115.0",
+    "pydantic>=2.0.0",
+    "uvicorn>=0.24.0",
+    "requests>=2.31.0",
+    # Isaac Sim + IsaacLab are installed via /isaac-sim/python.sh in the container
+    # and are not pip-installable in the normal sense.
+    # For mock-mode testing, no GPU dependencies are required.
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+# Mock-mode server: ISAACLAB_MOCK_MODE=true uv run --project . server
+server = "isaaclab_arena_env.server.app:main"
+
+[tool.setuptools]
+include-package-data = true
+packages = ["isaaclab_arena_env", "isaaclab_arena_env.server"]
+package-dir = { "isaaclab_arena_env" = ".", "isaaclab_arena_env.server" = "server" }
